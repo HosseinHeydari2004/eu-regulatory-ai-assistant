@@ -13,11 +13,14 @@ This repository contains my early experiments with text embeddings and retrieval
 * Verified that the custom implementation produces results consistent with the library output
 * Built a small ranking exercise: given a query sentence, rank other sentences by similarity
 
-### RAG pipeline — document chunking
+### RAG pipeline — chunking, vector storage, and retrieval
 
 * Loaded Article 5 (Prohibited AI Practices) of the EU AI Act into the project
 * Split the article into coherent chunks using regex — one chunk per lettered sub-point (a)-(l), plus a separate intro chunk
-* Verified chunk boundaries preserve complete, meaningful ideas rather than cutting text arbitrarily
+* Embedded all 13 chunks and stored them in a persistent Chroma vector database
+* Compared L2 and cosine distance metrics — confirmed they produce identical rankings for normalized embeddings (related by a fixed scaling factor)
+* Investigated a retrieval ranking discrepancy and traced it to query phrasing rather than a model or metric issue
+* Wrapped the full query pipeline into a reusable `retrieve(query, n=3)` function that returns ranked, relevant chunks with distance scores
 
 **Source document:** EU AI Act, Regulation (EU) 2024/1689, via [EUR-Lex](https://eur-lex.europa.eu/eli/reg/2024/1689/oj/eng).
 
@@ -25,7 +28,9 @@ This repository contains my early experiments with text embeddings and retrieval
 
 Raw source documents live in `data/`. Currently includes:
 
-* `ai_act_article5.txt` — Article 5 of the EU AI Act, used as the source text for chunking and (soon) retrieval experiments
+* `ai_act_article5.txt` — Article 5 of the EU AI Act, used as the source text for chunking and retrieval
+
+Generated vector database files live in `vector_store/` (not tracked in git — reproducible by re-running the notebook).
 
 ## Setup
 
@@ -41,12 +46,10 @@ After installation, open `similarity.ipynb` and run the notebook cells.
 
 Planned next steps include:
 
-* Storing chunk embeddings in a vector database (Chroma) and querying it for relevant chunks
-* Adding an agentic layer: retrieval, reasoning, and a citation-verification step
+* Adding an agentic layer: a reasoning agent and a citation-verification step built on top of `retrieve()`
 * Building an evaluation set to measure retrieval accuracy and hallucination rate
 * Deploying a live demo and adding monitoring/tracing
 
 ---
 
 This project is actively evolving as I learn more about embeddings, retrieval systems, and RAG workflows.
-
