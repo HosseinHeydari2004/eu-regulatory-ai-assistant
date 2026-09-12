@@ -22,6 +22,13 @@ This repository contains my early experiments with text embeddings and retrieval
 * Investigated a retrieval ranking discrepancy and traced it to query phrasing rather than a model or metric issue
 * Wrapped the full query pipeline into a reusable `retrieve(query, n=3)` function that returns ranked, relevant chunks with distance scores
 
+### Generation — grounded answers with a local LLM
+
+* Set up Mistral running locally via Ollama, separate from the embedding model used for retrieval
+* Built a `generate_answer(query, n=3)` function that retrieves relevant chunks, inserts them into an instruction-constrained prompt, and generates an answer using only that context
+* Tested grounding behavior deliberately: confirmed the model correctly declines to answer (rather than hallucinating) both on an unrelated question and on a topically-close question the retrieved context doesn't actually answer
+* Added an explicit "say you don't know if the answer isn't in the context" instruction to the prompt, rather than relying on the model's incidental good behavior
+
 **Source document:** EU AI Act, Regulation (EU) 2024/1689, via [EUR-Lex](https://eur-lex.europa.eu/eli/reg/2024/1689/oj/eng).
 
 ## Data
@@ -40,13 +47,19 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+This project also requires [Ollama](https://ollama.com) installed separately (not a pip package), with the Mistral model pulled locally:
+
+```bash
+ollama pull mistral
+```
+
 After installation, open `similarity.ipynb` and run the notebook cells.
 
 ## Roadmap
 
 Planned next steps include:
 
-* Adding an agentic layer: a reasoning agent and a citation-verification step built on top of `retrieve()`
+* Adding a verification agent that programmatically checks generated answers against retrieved sources, rather than relying on the prompt instruction alone
 * Building an evaluation set to measure retrieval accuracy and hallucination rate
 * Deploying a live demo and adding monitoring/tracing
 
