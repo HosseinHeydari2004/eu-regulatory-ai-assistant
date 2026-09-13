@@ -25,9 +25,15 @@ This repository contains my early experiments with text embeddings and retrieval
 ### Generation — grounded answers with a local LLM
 
 * Set up Mistral running locally via Ollama, separate from the embedding model used for retrieval
-* Built a `generate_answer(query, n=3)` function that retrieves relevant chunks, inserts them into an instruction-constrained prompt, and generates an answer using only that context
+* Built a `generate_answer(query, n=3)` function that retrieves relevant chunks, inserts them into an instruction-constrained prompt, and generates an answer using only that context, returning both the answer and the context used
 * Tested grounding behavior deliberately: confirmed the model correctly declines to answer (rather than hallucinating) both on an unrelated question and on a topically-close question the retrieved context doesn't actually answer
 * Added an explicit "say you don't know if the answer isn't in the context" instruction to the prompt, rather than relying on the model's incidental good behavior
+
+### Agents — verification of generated answers
+
+* Built a `verify_answer(answer, context)` function using an LLM-as-judge pattern: a second model call checks whether every claim in a generated answer is actually supported by the retrieved context, returning a `GROUNDED` / `NOT_GROUNDED` verdict plus a short explanation
+* Hardened the output parsing after discovering the model sometimes inserts blank lines between the verdict and explanation — fixed by filtering to non-empty lines rather than relying on fixed line positions
+* Tested the verifier against both a true positive (a correct, well-grounded answer, verified as `GROUNDED`) and a true negative (a deliberately fabricated claim — a specific, plausible-sounding penalty amount not present anywhere in the source text — correctly flagged as `NOT_GROUNDED` with an accurate explanation)
 
 **Source document:** EU AI Act, Regulation (EU) 2024/1689, via [EUR-Lex](https://eur-lex.europa.eu/eli/reg/2024/1689/oj/eng).
 
@@ -59,9 +65,9 @@ After installation, open `similarity.ipynb` and run the notebook cells.
 
 Planned next steps include:
 
-* Adding a verification agent that programmatically checks generated answers against retrieved sources, rather than relying on the prompt instruction alone
-* Building an evaluation set to measure retrieval accuracy and hallucination rate
-* Deploying a live demo and adding monitoring/tracing
+* Building a structured evaluation set (question/expected-answer pairs) to measure retrieval accuracy and hallucination rate systematically, rather than by hand-picked examples
+* Introducing LangChain/LangGraph to formalize the retrieve → generate → verify pipeline as an orchestrated agent graph
+* Deploying a live demo (FastAPI + Gradio/Streamlit, on Hugging Face Spaces) and adding monitoring/tracing
 
 ---
 
