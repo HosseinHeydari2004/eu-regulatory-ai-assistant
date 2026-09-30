@@ -1,51 +1,37 @@
-# Embedding Practice
+# EU Regulatory AI Assistant
  
-This repository contains my early experiments with text embeddings and retrieval-augmented generation (RAG), building toward an end-to-end Applied AI Engineer portfolio project: an agentic assistant for EU regulatory documents.
+An agentic RAG (Retrieval-Augmented Generation) system that answers questions about EU regulatory text — starting with Article 5 of the EU AI Act — with source-grounded answers and an LLM-as-judge verification step. Built as an end-to-end Applied AI Engineer portfolio project.
  
+## Project Structure
+ 
+* **`rag.py`** — the core pipeline: chunking, vector storage/retrieval (`retrieve()`), grounded answer generation (`generate_answer()`), and answer verification (`verify_answer()`). A single `ask_llm()` function is the one place the code talks to a language model, so swapping models later is a one-function change.
+* **`eval_set.py`** — the 20-case evaluation set (15 answerable questions covering every chunk, 5 deliberately unanswerable).
+* **`run_eval.py`** — runs the full pipeline against `eval_set.py` and prints retrieval accuracy, refusal accuracy, and groundedness rate.
+* **`try_it.py`** — a minimal script for asking a single question and inspecting the answer/verdict, useful for quick manual checks.
+* **`exploration.ipynb`** — the original development notebook. Kept as a record of the build process (including debugging real issues along the way), not the code that actually runs — `rag.py` is the current, canonical pipeline.
+* **`data/`** — source documents (currently `ai_act_article5.txt`, from the EU AI Act, Regulation (EU) 2024/1689, via [EUR-Lex](https://eur-lex.europa.eu/eli/reg/2024/1689/oj/eng)).
 ## What's Included
  
 ### Foundations — embeddings and similarity
- 
-* Loaded a pretrained Sentence Transformer model (`all-MiniLM-L6-v2`)
-* Generated 384-dimensional sentence embeddings
-* Compared embeddings using the built-in `model.similarity()` method
-* Implemented cosine similarity from scratch with NumPy
-* Verified that the custom implementation produces results consistent with the library output
-* Built a small ranking exercise: given a query sentence, rank other sentences by similarity
+* Implemented cosine similarity from scratch with NumPy and verified it against library output before relying on any library-provided version.
 ### RAG pipeline — chunking, vector storage, and retrieval
- 
-* Loaded Article 5 (Prohibited AI Practices) of the EU AI Act into the project
-* Split the article into chunks using regex based on its lettered sub-points
-* Embedded chunks and stored them in a persistent Chroma vector database
-* Compared L2 and cosine distance metrics — confirmed they produce identical rankings for normalized embeddings (related by a fixed scaling factor)
-* Investigated a retrieval ranking discrepancy and traced it to query phrasing
-* Wrapped the full query pipeline into a reusable `retrieve(query, n=3)` function returning `(chunk_id, document, distance)` per result
+* Article 5 is split into chunks based on its real lettered structure, embedded, and stored in a persistent Chroma vector database.
+* `retrieve(query, n)` returns ranked, relevant chunks with distance scores.
 ### Generation — grounded answers with a local LLM
- 
-* Set up Mistral running locally via Ollama, separate from the embedding model used for retrieval
-* Built a `generate_answer(query, n=3)` function that retrieves relevant chunks, inserts them into an instruction-constrained prompt, and generates an answer using only that context, returning both the answer and the context used
-* Tested grounding behavior deliberately on an unrelated question and a topically-close but unanswerable question — confirmed correct refusal in both cases rather than hallucination
+* `generate_answer(query, n)` retrieves relevant chunks and generates an answer constrained to only that context, returning both the answer and the context used.
 ### Agents — verification of generated answers
- 
-* Built a `verify_answer(answer, context)` function using an LLM-as-judge pattern: a second model call checks whether every claim in a generated answer is supported by the retrieved context, returning a `GROUNDED` / `NOT_GROUNDED` verdict plus an explanation
-* Tested the verifier against a true positive (a correct, grounded answer) and a true negative (a deliberately fabricated claim — a specific, plausible penalty amount not present anywhere in the source text) — both correctly classified
+* `verify_answer(answer, context)` uses a second, independent LLM call (an LLM-as-judge pattern) to check whether every claim in a generated answer is actually supported by its context, returning a `GROUNDED` / `NOT_GROUNDED` verdict.
+* Validated against a true positive (a correct, grounded answer) and a true negative (a fabricated penalty amount, correctly caught as unsupported).
 ### Evaluation — a systematic test set, and two real bugs it caught
- 
-* Built a 20-case evaluation set (15 answerable questions covering every chunk, 5 deliberately unanswerable) to measure the pipeline systematically instead of relying on hand-picked examples
-* **Found and fixed a chunking bug**: Article 5 contains two independently lettered lists at different structural levels — the top-level prohibited practices (a)-(h), and a nested 2-item sub-list inside a later paragraph that reuses the same `(a)`/`(b)` labels. The original regex-based chunking treated every lettered match as equivalent, corrupting several chunks. Fixed by validating each match against the article's known real structure (the correct sequence of top-level letters) rather than trusting pattern-matching alone, and rebuilt the vector database on the corrected 9-chunk structure. **Retrieval accuracy improved from 86.7% to 100%** as a direct, measured result.
-* **Found and fixed a verifier blind spot**: the LLM-as-judge correctly assessed content-based answers but initially misjudged correct refusals ("I don't know") as unsupported rather than recognizing an accurate absence-of-information statement as itself grounded. Fixed with an explicit instruction in the verification prompt telling the judge to treat accurate refusals as `GROUNDED`.
-* **Found and fixed output-parsing fragility**: the verifier's raw output format varied between runs (capitalization of the verdict word, whether the explanation appeared on the same line or a new one, trailing punctuation), which caused inconsistent scoring between otherwise-identical runs. Fixed with more defensive parsing that checks how the first line *starts* rather than trusting an exact format.
-* **Final scorecard, confirmed reproducible across multiple runs**: 100% retrieval accuracy, 100% refusal accuracy, 100% groundedness rate.
-* A known, documented limitation: chunk_8 (real-time biometric identification) absorbed significantly more content than any other chunk during the chunking fix, since the corresponding article section is long. Despite this, it retrieved correctly for all six evaluation questions pointing to it — but it remains a candidate for further sub-chunking in future work.
-**Source document:** EU AI Act, Regulation (EU) 2024/1689, via [EUR-Lex](https://eur-lex.europa.eu/eli/reg/2024/1689/oj/eng).
- 
-## Data
- 
-Raw source documents live in `data/`. Currently includes:
- 
-* `ai_act_article5.txt` — Article 5 of the EU AI Act, used as the source text for chunking and retrieval
-Generated vector database files live in `vector_store/` (not tracked in git — reproducible by re-running the notebook).
- 
+* A 20-case evaluation set replaced hand-picked testing, and surfaced two real defects:
+  * **A chunking bug**: the source document has two independently lettered lists at different structural levels; the original chunking flattened both together. Fixed by validating matches against the article's real structure. Retrieval accuracy improved from 86.7% to 100%.
+  * **A verifier blind spot**: correct refusals ("I don't know") were being judged unsupported. Fixed with an explicit prompt instruction.
+  * A related fix: the verifier's raw output format varied between runs (capitalization, line breaks, punctuation), requiring more defensive parsing than a naive first-line split.
+* **Final scorecard, reproducible across multiple runs**: 100% retrieval accuracy, 100% refusal accuracy, 100% groundedness rate.
+* Known limitation: chunk_8 (real-time biometric identification) is significantly larger than the other chunks, since that section of the article is long. It retrieved correctly for all six evaluation questions targeting it, but remains a candidate for further sub-chunking.
+### Refactor — from notebook to a reusable module
+* Moved the working pipeline out of the notebook into `rag.py`, with file paths made relative (no more machine-specific absolute paths) and the LLM call isolated behind `ask_llm()`.
+* Re-ran the full 20-case evaluation against the refactored module as a regression test, confirming the same 100% / 100% / 100% scorecard.
 ## Setup
  
 ```bash
@@ -60,15 +46,24 @@ This project also requires [Ollama](https://ollama.com) installed separately (no
 ollama pull mistral
 ```
  
-After installation, open `similarity.ipynb` and run the notebook cells.
+To build the index and try a question:
+ 
+```bash
+python try_it.py
+```
+ 
+To run the full evaluation:
+ 
+```bash
+python run_eval.py
+```
  
 ## Roadmap
  
-Planned next steps include:
- 
-* Sub-chunking the oversized chunk_8 to test whether retrieval precision improves further
-* Introducing LangChain/LangGraph to formalize the retrieve → generate → verify pipeline as an orchestrated agent graph
-* Deploying a live demo (FastAPI + Gradio/Streamlit, on Hugging Face Spaces) and adding monitoring/tracing
+* Point `ask_llm()` at a hosted LLM API (in progress) to enable a live, deployed demo, since a deployed app can't reach a local Ollama instance.
+* Attempt a live deployment (Streamlit Community Cloud), with a recorded demo video as a fallback if free-tier hosting constraints block it.
+* Sub-chunk the oversized chunk_8 to test whether retrieval precision improves further.
+* Formalize retrieve → generate → verify as a LangChain/LangGraph agent graph.
 ---
  
 This project is actively evolving as I learn more about embeddings, retrieval systems, and RAG workflows.
